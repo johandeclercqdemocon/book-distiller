@@ -10,8 +10,10 @@ quietly dropped the thing that made a claim actionable.
 
 **Status:** working. One book has been through the complete cycle — *SIP: Understanding the
 Session Initiation Protocol* (Johnston, 3rd ed., 427 pages), 9 of 17 chapters, 68,743 source
-words → a 23,125-word summary with a 246-row identifier ledger, reviewed over two adversarial
-rounds. Six phases built; see `PLAN.md` for the design and the results of each.
+words → a **25,596-word summary** (66 pages as an A4 PDF) with a 246-row identifier ledger and
+chapter 16's five call flows transcribed from rendered page images. Two adversarial review
+rounds plus two targeted restoration passes. Six phases built; see `PLAN.md` for the design
+and what each one found.
 
 ## Quickstart
 
@@ -47,7 +49,8 @@ globally would shadow Claude Code's OAuth login and move billing to the API.
 | — | Triage | `scripts/triage.py --backend anthropic` | ~$1.20 |
 | 4 | Review | `/adversary <slug> [--revise]` | ~$2.50/round |
 | 5 | Measure | `scripts/mutate.py` → review → `scripts/score.py` | ~$3 |
-| 6 | Render | `scripts/render.py` — A4 PDF, contents, index | free |
+| 6 | Contents | `scripts/contents.py` — markdown navigation, idempotent | free |
+| 7 | Render | `scripts/render.py` — A4 PDF, contents, page numbers, index | free |
 
 A full cycle on a 400-page book is roughly **$10–15**. The deterministic stages are free and
 do a surprising amount of the work: `verify.py` and `omissions.py` between them cover invented
@@ -122,6 +125,14 @@ revisit once three or four technical books have been through.
 **Agent and command definitions load at Claude Code startup.** Editing `.claude/agents/` or
 `.claude/commands/` needs a restart; `prompts/*.md` and the scripts are read at run time and
 are live immediately.
+
+**Transcribed figures are exempt from the identifier and numeral checks — by design, not an
+oversight.** `verify.py`'s `check_content` skips those two for any block whose text *or heading
+path* contains `TRANSCRIBED`. A ladder diagram's addresses and message numbers were read off a
+page image and exist nowhere in the extracted text, so the checks could only ever produce false
+positives. Quote and verbatim checks stay active. Restoring ch16's five flows added 88 message
+rows and produced **zero** new findings because of this; delete the guard and it becomes
+dozens.
 
 ## What to read next
 

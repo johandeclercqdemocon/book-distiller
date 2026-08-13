@@ -15,7 +15,12 @@ Six stages. Code does the bookkeeping; the model does the judgment. Full rationa
 | 2 | Assemble | `/assemble <slug>` | all digests | `summaries/<slug>{,-brief}.md` |
 | 3 | Verify | `uv run python scripts/verify.py <slug>` | summary + source | `work/<slug>/verify.json` |
 | 4 | Review | `/adversary <slug>` | summary, digests, rubric | `work/<slug>/review-r<N>.md` |
-| 5 | Render | `uv run python scripts/render.py <slug>` | summary | `summaries/<slug>.pdf` |
+| 5 | Contents | `uv run python scripts/contents.py <slug>` | summary headings | contents block in the `.md` |
+| 6 | Render | `uv run python scripts/render.py <slug>` | summary | `summaries/<slug>.pdf` |
+
+Run contents **before** render, and re-run it after any revision that changes headings —
+`contents.py --check` exits 1 when the block is stale. A contents list that no longer matches
+the document is worse than none, because a map that is wrong gets trusted.
 
 ## Which file governs what
 
