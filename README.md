@@ -10,8 +10,9 @@ quietly dropped the thing that made a claim actionable.
 
 **Status:** working. One book has been through the complete cycle — *SIP: Understanding the
 Session Initiation Protocol* (Johnston, 3rd ed., 427 pages), 9 of 17 chapters, 68,743 source
-words → a **25,596-word summary** (66 pages as an A4 PDF) with a 246-row identifier ledger and
-chapter 16's five call flows transcribed from rendered page images. Two adversarial review
+words → a **29,362-word summary** (89 pages as an A4 PDF) with a 246-row identifier ledger,
+chapter 16's five call flows transcribed from rendered page images, and all seven of its
+wire-format message listings (§16.1–§16.7) reproduced verbatim. Two adversarial review
 rounds plus two targeted restoration passes. Six phases built; see `PLAN.md` for the design
 and what each one found.
 

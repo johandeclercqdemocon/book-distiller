@@ -473,6 +473,81 @@ def check_header_counts(book: corpus.Book, deep: str, root: Path) -> list[Findin
     return out
 
 
+# What a part's `reproduce` directive demands, and how to tell whether the summary honoured it.
+# Each entry: (what to look for in the summary, what the digest records it under).
+_REPRODUCE_KINDS = {
+    "figures": ("figure transcriptions", "figures"),
+    "verbatim": ("verbatim wire-format blocks", "verbatim"),
+    "tables": ("reproduced tables", "tables"),
+}
+
+
+def check_reproduce(book: corpus.Book, deep: str, root: Path) -> list[Finding]:
+    """Enforce `"reproduce": [...]` in a part's meta.json entry.
+
+    A `scope` note is prose, and assembly may reasonably reinterpret it. Three times on this
+    project a part whose scope said its figures *were* the chapter had them compressed out —
+    legally, with a declaration, because a declared omission satisfies every other rule. A
+    declaration says the omission was honest; it cannot say it was wanted.
+
+    So `reproduce` is the directive that outranks assembly's judgement, and it is checked here
+    rather than asked for in a prompt. If a part demands its figures and the summary carries
+    none of that part's figure transcriptions, that is Critical — not because the summary lied,
+    but because the reader asked for something and did not get it.
+    """
+    out: list[Finding] = []
+    for part in book.meta.get("parts", []):
+        label = corpus.normalise_label(part["label"])
+        for kind in part.get("reproduce", []):
+            if kind not in _REPRODUCE_KINDS:
+                out.append(Finding("reproduce.unknown_kind", MINOR, 0,
+                                   f"{label}: unknown reproduce directive {kind!r}; known: "
+                                   f"{', '.join(sorted(_REPRODUCE_KINDS))}"))
+                continue
+            human, section = _REPRODUCE_KINDS[kind]
+            digest = root / "work" / book.slug / "digests" / f"{label}.md"
+            if not digest.is_file():
+                continue
+            want = _digest_section_size(digest.read_text(), section)
+            got = _summary_carries(deep, label, kind)
+            if want and not got:
+                out.append(Finding(
+                    "reproduce.directive_unmet", CRITICAL, 0,
+                    f"{label} requires `reproduce: {kind}` and the summary carries no {human} "
+                    f"from it; the digest holds {want} lines of them",
+                    f"meta.json scope: {str(part.get('scope',''))[:120]}"))
+    return out
+
+
+def _digest_section_size(md: str, section: str) -> int:
+    take, n = False, 0
+    for line in md.splitlines():
+        if line.startswith("## "):
+            take = section in line.lower()
+            continue
+        if take and line.strip():
+            n += 1
+    return n
+
+
+def _summary_carries(deep: str, label: str, kind: str) -> bool:
+    """Does the summary hold material of this kind attributed to this part?"""
+    marker = {"figures": "TRANSCRIBED", "verbatim": "```", "tables": "|"}[kind]
+    for block in parse_blocks(deep):
+        locs = [l.label for l in (block.locators or block.inherited)]
+        if label not in locs:
+            continue
+        if kind == "verbatim" and block.kind == "fence":
+            # `parse_blocks` strips a fence's own delimiters, so the ``` marker never
+            # survives into `block.text` and a correctly marked verbatim block could not
+            # satisfy this check by string match. The block's kind is the marker.
+            return True
+        hay = block.text + " " + " ".join(block.heading_path)
+        if marker in hay or (kind == "figures" and "TRANSCRIBED" in hay.upper()):
+            return True
+    return False
+
+
 def words_of(md: str) -> int:
     return len(md.split())
 
@@ -577,6 +652,7 @@ def main() -> int:
     findings += check_lengths(book, deep, brief)
     findings += check_staleness(book)
     findings += check_header_counts(book, deep, ROOT)
+    findings += check_reproduce(book, deep, ROOT)
     findings.sort(key=lambda f: (ORDER[f.severity], f.where, f.line))
 
     counts = {s: sum(1 for f in findings if f.severity == s) for s in (CRITICAL, MAJOR, MINOR)}
