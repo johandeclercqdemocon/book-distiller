@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Run a command with ANTHROPIC_API_KEY loaded from ~/.bashrc.
+#
+# .bashrc returns early in non-interactive shells, so the key is never set in a script, a cron
+# job, or a Claude Code Bash call. This evaluates just the export line, and only for the child
+# process — the key never lands in the calling shell, where it would outrank Claude Code's
+# OAuth login and quietly move billing from the subscription to the API.
+#
+#   ./scripts/withkey uv run python scripts/run.py distill sip-johnston --parts ch13 --force
+set -euo pipefail
+[ $# -gt 0 ] || { echo "usage: withkey <command> [args...]" >&2; exit 2; }
+eval "$(grep -hE '^[[:space:]]*(export[[:space:]]+)?ANTHROPIC_API_KEY=' ~/.bashrc | head -1)"
+: "${ANTHROPIC_API_KEY:?not found in ~/.bashrc}"
+export ANTHROPIC_API_KEY
+exec "$@"

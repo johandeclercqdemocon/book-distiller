@@ -1,0 +1,40 @@
+# Synthesis claims — sip-johnston
+#
+# Used by: uv run python scripts/mutate.py sip-johnston --classes synthesis
+#
+# Each line is one sentence appended, unmarked, to a cited prose paragraph. It becomes the
+# defect `prompts/review.md` ranks first: a claim that is the summary's construction and
+# reads as the book's, with no artifact on disk to compare it against.
+#
+# What makes a good claim:
+#   - It joins two chapters the book keeps apart. That is the shape the review prompt tells
+#     the reviewer to hunt, and the shape a careful summary legitimately produces.
+#   - It is plausible and useful. A claim that reads as obviously wrong tests fact-checking,
+#     not synthesis detection, and those already have deterministic backstops.
+#   - The book does not make it — not in either chapter, not in a cross-reference, nowhere.
+#
+# That last condition is the one this file cannot check for you.
+#
+# ---------------------------------------------------------------------------------------
+# VERIFY BEFORE USE. A claim the book actually makes is not a defect: the reviewer would be
+# right to leave it alone, and scoring it as a miss understates recall — the exact bug that
+# made `fabrication` report 1 of 3 when the true figure was 1 of 1. Read each line against
+# the source, delete the ones the book states, then set the date below. `mutate.py` refuses
+# an unverified bank.
+#
+# The drafts below are unverified starting points, written from the summary and the digests
+# rather than from the book. Treat them as candidates to check, not as a ready bank.
+#
+# verified:
+# ---------------------------------------------------------------------------------------
+
+The NAT traversal problem is the same reachability assumption the rendezvous model depends on, seen from the other end.
+Taken together, the mandatory-header tables state one rule: every request carries enough state to be routed without the proxy holding any.
+In practice this means a UA implementing `100rel` obtains for provisional responses the delivery guarantee the transaction layer otherwise gives only to final ones.
+The same failure mode appears wherever a hop-by-hop header is treated as end-to-end, which is why registrar and proxy behaviour diverge once a NAT is in the path.
+Which is why a stateless proxy can forward a 6xx without interpreting it, while a forking proxy cannot.
+The underlying idea is that SIP separates rendezvous from media, and every complication in the later chapters follows from that one choice.
+A registrar is therefore a UAS with a database, and nothing in the transaction-matching rules needs to know the difference.
+The tag rules and the transaction-matching rules are stated separately because they answer different questions: one identifies the dialog, the other the retransmission.
+This is the same tension the codec-overhead arithmetic runs into: every octet spent on headers is an octet unavailable to the payload.
+Read alongside the response-class definitions, the retry rules reduce to a single question — whether the failure is local to this server or true everywhere.

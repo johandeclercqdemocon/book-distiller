@@ -1,0 +1,168 @@
+/* A4 print edition. Rendered by WeasyPrint, which supports the CSS Paged Media features
+   this depends on: page-margin boxes, string-set running headers, leader() and
+   target-counter() for the contents and index page references, and PDF bookmarks. */
+
+@page {
+  size: A4;
+  margin: 20mm 18mm 18mm 18mm;
+
+  @top-left {
+    content: string(section);
+    font: italic 8.5pt "DejaVu Serif", Georgia, serif;
+    color: #666;
+    padding-bottom: 2mm;
+  }
+  @top-right {
+    content: string(booktitle);
+    font: 8.5pt "DejaVu Serif", Georgia, serif;
+    color: #666;
+    padding-bottom: 2mm;
+  }
+  @bottom-center {
+    content: counter(page);
+    font: 9pt "DejaVu Serif", Georgia, serif;
+    color: #444;
+    padding-top: 3mm;
+  }
+}
+
+@page cover {
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+
+html {
+  font: 10.5pt/1.45 "DejaVu Serif", Georgia, serif;
+  color: #16181d;
+  hyphens: auto;
+}
+
+body { margin: 0; }
+
+/* --- cover -------------------------------------------------------------- */
+
+.cover {
+  page: cover;
+  break-after: page;
+  padding-top: 55mm;
+}
+.cover h1 { font-size: 24pt; line-height: 1.2; margin: 0 0 4mm; border: 0; }
+.cover .byline { font-size: 12pt; color: #444; margin: 0 0 2mm; }
+.cover .meta { font-size: 9.5pt; color: #666; margin-top: 12mm; }
+.cover .meta div { margin-bottom: 1mm; }
+
+/* --- headings ----------------------------------------------------------- */
+
+h1, h2, h3, h4 {
+  font-family: "DejaVu Sans", Helvetica, sans-serif;
+  font-weight: 600;
+  break-after: avoid;
+  line-height: 1.25;
+}
+h1 { font-size: 17pt; margin: 0 0 6mm; string-set: booktitle content(text); }
+h2 {
+  font-size: 14pt;
+  margin: 9mm 0 3mm;
+  padding-bottom: 1.5mm;
+  border-bottom: 0.4pt solid #c8ccd4;
+  break-before: page;
+  string-set: section content(text);
+  bookmark-level: 1;
+}
+h3 { font-size: 11.5pt; margin: 6mm 0 2mm; bookmark-level: 2; }
+h4 { font-size: 10.5pt; margin: 4mm 0 1.5mm; color: #333; bookmark-level: 3; }
+h2:first-of-type { break-before: avoid; }
+
+p, ul, ol, blockquote, table { break-inside: auto; orphans: 3; widows: 3; }
+p { margin: 0 0 2.5mm; }
+ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+li { margin-bottom: 1mm; }
+
+blockquote {
+  margin: 3mm 0;
+  padding: 2mm 0 2mm 4mm;
+  border-left: 1.5pt solid #c8ccd4;
+  color: #40454f;
+  font-size: 9.5pt;
+}
+
+/* --- code and verbatim -------------------------------------------------- */
+
+code, pre {
+  font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+code { font-size: 8.8pt; background: #f2f3f5; padding: 0.3mm 0.8mm; border-radius: 1pt; }
+pre {
+  font-size: 8.2pt;
+  line-height: 1.35;
+  background: #f7f8fa;
+  border: 0.4pt solid #dfe2e8;
+  border-radius: 2pt;
+  padding: 2.5mm 3mm;
+  margin: 3mm 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* --- tables ------------------------------------------------------------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin: 3mm 0 4mm;
+}
+thead { display: table-header-group; }  /* repeat headers across a page break */
+th, td {
+  border: 0.4pt solid #d5d9e0;
+  padding: 1.2mm 2mm;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: #eef0f4; font-family: "DejaVu Sans", sans-serif; font-size: 8.6pt; }
+
+/* --- contents ----------------------------------------------------------- */
+
+.frontmatter { break-after: page; }
+.frontmatter > h2 { break-before: avoid; }
+
+nav.toc ul { list-style: none; padding-left: 0; margin: 0; }
+nav.toc ul ul { padding-left: 5mm; font-size: 9.5pt; color: #333; }
+nav.toc li { margin-bottom: 0.8mm; }
+nav.toc a {
+  text-decoration: none;
+  color: inherit;
+}
+nav.toc a::after {
+  content: leader('.') target-counter(attr(href), page);
+  color: #555;
+}
+nav.toc > ul > li > a { font-family: "DejaVu Sans", sans-serif; font-weight: 600; }
+
+/* --- back-of-book index ------------------------------------------------- */
+
+.index { break-before: page; }
+.index .letter {
+  font-family: "DejaVu Sans", sans-serif;
+  font-weight: 600;
+  font-size: 10pt;
+  color: #666;
+  margin: 4mm 0 1.5mm;
+  break-after: avoid;
+}
+.index ul { columns: 2; column-gap: 8mm; list-style: none; padding: 0; margin: 0; font-size: 9pt; }
+.index li { break-inside: avoid; margin-bottom: 0.6mm; }
+.index code { background: none; padding: 0; font-size: 8.8pt; }
+.index .refs { color: #555; }
+.index .refs a { text-decoration: none; color: inherit; }
+.index .refs a::after { content: target-counter(attr(href), page); }
+.index .refs a + a::before { content: ", "; }
+
+/* --- links -------------------------------------------------------------- */
+
+a { color: #1a4f8a; text-decoration: none; }
+p a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 7.5pt; color: #777; word-break: break-all; }
+
+hr { border: 0; border-top: 0.4pt solid #d5d9e0; margin: 5mm 0; }

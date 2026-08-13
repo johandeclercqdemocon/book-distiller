@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "additionalDirectories": [
+      "<HOME>/reference/books"
+    ],
+    "allow": [
+      "Read(//<HOME>/reference/books/**)",
+      "Bash(uv run:*)",
+      "Bash(uv sync:*)",
+      "Bash(pdftotext:*)",
+      "Bash(pdftoppm:*)",
+      "Bash(pdfinfo:*)",
+      "Bash(rg:*)",
+      "Bash(wc:*)"
+    ],
+    "deny": [
+      "Write(//<HOME>/reference/books/*/source/**)",
+      "Edit(//<HOME>/reference/books/*/source/**)",
+      "Write(//<HOME>/reference/books/*/text/**)",
+      "Edit(//<HOME>/reference/books/*/text/**)"
+    ]
+  }
+}

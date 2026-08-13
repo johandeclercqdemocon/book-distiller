@@ -1,0 +1,26 @@
+[project]
+name = "book-distiller"
+version = "0.1.0"
+description = "Deterministic spine for book distillation: outline extraction and summary verification."
+requires-python = ">=3.12"
+
+# pypdf is used only by scripts/outline.py, to read a PDF's embedded bookmarks.
+# Text extraction is pdftotext (poppler), page rendering is pdftoppm — both external binaries.
+dependencies = [
+    "pypdf>=5.1.0",
+    # Rendering the A4 print edition: markdown -> HTML -> PDF with real page numbers.
+    # WeasyPrint uses the system pango/harfbuzz, both present on Ubuntu 24.04.
+    "weasyprint>=62",
+    "markdown>=3.6",
+    "anthropic>=0.121.0",
+]
+
+[tool.uv]
+# Not an installable package — just scripts run with `uv run`.
+package = false
+
+[tool.pyright]
+# scripts/ modules import each other directly; they are not an installed package.
+extraPaths = ["scripts"]
+venvPath = "."
+venv = ".venv"

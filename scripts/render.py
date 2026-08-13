@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Render a summary to a printable A4 PDF with a contents list and a back-of-book index.
+
+    uv run python scripts/render.py <slug> [--brief] [--html] [-o OUT]
+
+The markdown stays the source of truth; this is a view of it. Page numbers, contents
+page references and index page references are all resolved by the paged-media engine at
+layout time, so they cannot drift from the text the way hand-written ones do.
+
+The index is built automatically from every backticked identifier in the summary — which
+in a technical book is exactly the lookup table you want when you come back to it six
+months later.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import html
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+CSS_PATH = ROOT / "print" / "a4.css"
+
+_PRE_RE = re.compile(r"<pre\b.*?</pre>", re.S)
+_TOKEN_RE = re.compile(
+    r'<h[1-6][^>]*\bid="(?P<section>[^"]+)"|<code>(?P<code>[^<]{1,48})</code>'
+)
+_IDENT_RE = re.compile(r"^[\w./@:$*<>\[\]{}+#|-]+$")
+_MAX_REFS = 4
+
+
+def to_html(md_text: str) -> tuple[str, str]:
+    import markdown
+
+    md = markdown.Markdown(
+        extensions=["extra", "sane_lists", "attr_list", "toc"],
+        extension_configs={"toc": {"toc_depth": "2-3", "permalink": False}},
+    )
+    # `toc` is attached to the instance by the extension, so it is not a declared attribute.
+    return md.convert(md_text), getattr(md, "toc", "")
+
+
+def index_entries(body: str) -> tuple[str, dict[str, list[str]]]:
+    """Anchor the first mention of each identifier per section; return the index map.
+
+    Returns the rewritten body and {identifier: [anchor ids]}. Fenced blocks are skipped:
+    a token inside a code listing is an example, not an occurrence worth indexing.
+    """
+    entries: dict[str, list[str]] = {}
+    seen: set[tuple[str, str]] = set()
+    state = {"section": "", "n": 0}
+
+    def anchor_segment(segment: str) -> str:
+        chunks: list[str] = []
+        last = 0
+        for m in _TOKEN_RE.finditer(segment):
+            if m.group("section"):
+                state["section"] = m.group("section")
+                continue
+            token = html.unescape(m.group("code")).strip()
+            key = (token, state["section"])
+            if not _indexable(token) or key in seen:
+                continue
+            seen.add(key)
+            state["n"] += 1
+            name = f"ix{state['n']}"
+            entries.setdefault(token, []).append(name)
+            chunks.append(segment[last : m.start()])
+            chunks.append(f'<span id="{name}">{m.group(0)}</span>')
+            last = m.end()
+        chunks.append(segment[last:])
+        return "".join(chunks)
+
+    out: list[str] = []
+    pos = 0
+    for pre in _PRE_RE.finditer(body):
+        out.append(anchor_segment(body[pos : pre.start()]))
+        out.append(pre.group(0))
+        pos = pre.end()
+    out.append(anchor_segment(body[pos:]))
+    return "".join(out), entries
+
+
+def _indexable(token: str) -> bool:
+    if len(token) < 2 or len(token) > 48 or " " in token:
+        return False
+    if not _IDENT_RE.match(token):
+        return False
+    return bool(re.search(r"[A-Za-z]", token))
+
+
+def index_html(entries: dict[str, list[str]]) -> str:
+    if not entries:
+        return ""
+    def sort_key(tok: str) -> tuple[str, str]:
+        stripped = tok.lstrip("./@$<[{|#-")
+        return (stripped.lower() or tok.lower(), tok)
+
+    groups: dict[str, list[str]] = {}
+    for token in sorted(entries, key=sort_key):
+        first = sort_key(token)[0][:1].upper()
+        groups.setdefault(first if first.isalpha() else "#", []).append(token)
+
+    parts = ['<section class="index">', "<h2>Index</h2>"]
+    for letter in sorted(groups, key=lambda c: (c != "#", c)):
+        parts.append(f'<div class="letter">{letter}</div><ul>')
+        for token in groups[letter]:
+            refs = "".join(f'<a href="#{a}"></a>' for a in entries[token][:_MAX_REFS])
+            parts.append(f'<li><code>{html.escape(token)}</code> <span class="refs">{refs}</span></li>')
+        parts.append("</ul>")
+    parts.append("</section>")
+    return "\n".join(parts)
+
+
+def cover_html(book: corpus.Book, subtitle: str, words: int) -> str:
+    meta = book.meta
+    authors = ", ".join(meta.get("authors", [])) or "unknown"
+    bits = [
+        f"{meta.get('publisher', '')} {meta.get('year', '')}".strip(),
+        f"ISBN {meta['isbn']}" if meta.get("isbn") else "",
+        f"{len(book.parts)} parts · {book.source_words:,} source words",
+        f"this distillation: {words:,} words ({words / book.source_words:.1%} of source)"
+        if book.source_words
+        else "",
+        f"rendered {dt.date.today().isoformat()} · A4",
+    ]
+    lines = "".join(f"<div>{html.escape(b)}</div>" for b in bits if b)
+    return (
+        '<section class="cover">'
+        f"<h1>{html.escape(book.title)}</h1>"
+        f'<p class="byline">{html.escape(authors)}</p>'
+        f'<p class="byline">{html.escape(subtitle)}</p>'
+        f'<div class="meta">{lines}</div>'
+        "</section>"
+    )
+
+
+def build(book: corpus.Book, md_text: str, subtitle: str) -> str:
+    body, toc = to_html(md_text)
+    body, entries = index_entries(body)
+    return "\n".join(
+        [
+            "<!doctype html><html><head><meta charset='utf-8'>",
+            f"<title>{html.escape(book.title)}</title></head><body>",
+            cover_html(book, subtitle, len(md_text.split())),
+            '<section class="frontmatter"><h2>Contents</h2>',
+            f'<nav class="toc">{toc}</nav></section>',
+            f'<main>{body}</main>',
+            index_html(entries),
+            "</body></html>",
+        ]
+    )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("slug")
+    ap.add_argument("--brief", action="store_true", help="render the brief instead of the deep summary")
+    ap.add_argument("--html", action="store_true", help="also keep the intermediate HTML")
+    ap.add_argument("-o", "--out", type=Path)
+    args = ap.parse_args()
+
+    book = corpus.load(args.slug)
+    src = book.brief_path if args.brief else book.deep_path
+    if not src.is_file():
+        print(f"nothing to render: {src}", file=sys.stderr)
+        return 2
+
+    subtitle = "Brief" if args.brief else "Deep distillation"
+    page = build(book, src.read_text(), subtitle)
+    out = args.out or src.with_suffix(".pdf")
+
+    if args.html:
+        html_path = out.with_suffix(".html")
+        html_path.write_text(page)
+        print(f"wrote {html_path}")
+
+    try:
+        from weasyprint import CSS, HTML
+    except Exception as exc:  # noqa: BLE001 — missing system libs surface as OSError
+        print(f"cannot import weasyprint ({exc}).\nHTML rendering still works with --html.", file=sys.stderr)
+        return 3
+
+    HTML(string=page, base_url=str(src.parent)).write_pdf(out, stylesheets=[CSS(filename=str(CSS_PATH))])
+    print(f"wrote {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

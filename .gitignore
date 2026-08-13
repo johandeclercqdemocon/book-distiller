@@ -1,0 +1,21 @@
+# Per-book intermediates: digests, verify output, review rounds. Regenerable, large, noisy.
+work/
+
+# Never let corpus material in here, even by accident.
+*.pdf
+*.epub
+
+# Local-only Claude Code settings (machine paths, personal permission grants).
+.claude/settings.local.json
+
+# Credentials never belong in the repo. triage.py --backend anthropic reads
+# ANTHROPIC_API_KEY from the environment; pass it inline rather than exporting it, so it
+# does not shadow Claude Code's OAuth login and silently move billing to the API.
+.env
+*.key
+
+
+# Python
+.venv/
+__pycache__/
+*.pyc
