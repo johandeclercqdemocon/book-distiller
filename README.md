@@ -133,7 +133,20 @@ ch13 run passed it going 111 rows → 183 while losing eleven real SDP attribute
 and padding the total with column-split debris (`*`, `+`, `-`) and one prose phrase. The count
 rose and the coverage fell. The guard is now set membership: no key present before may be absent
 after, dropped keys are restored from the originals, and debris is filtered from what was added.
-Verified by replaying that run's actual response — 89 → 182 rows, nothing lost, nothing junk.
+
+Validated twice on ch13: by replaying the failing run's actual response (89 → 182), and by a
+fresh instrumented run capturing the pass's real input and output — **90 → 164, no key lost, no
+junk kept**. The guard's promise is bounded to the pass, so only that second form tests it; the
+first call regenerates the whole digest and varies run to run.
+
+Two things that measurement taught, both worth knowing before repeating it:
+
+- **Digest ledgers cannot be compared across runs by exact key.** The fresh run looked like it
+  had lost 18 baseline identifiers, including `INVITE`, `ACK` and `BYE`. 17 of the 18 were
+  present under a different spelling. Compare membership by normalised key or not at all.
+- **Row count still does not measure coverage.** 164 rows for one chapter is not self-evidently
+  better than 89. Nobody has read them. The junk filter caught nothing this time, which is
+  weak evidence and not a substitute.
 
 A side effect worth knowing: where the model unpacks a row that packed a family into one cell,
 restoring the original leaves both forms in the ledger. Redundancy is the deliberate trade
