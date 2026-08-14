@@ -100,9 +100,16 @@ cases; until then, a Critical from `quote.not_found` deserves a look before it i
 **`omissions.py` attributes tables by proximity, and proximity is not ownership.** Writing
 "Table 4.2" in prose within five lines of a different table makes it report that table as
 reproduced. A reviser hit this and worked around it by writing "Tables 4.2 and 4.8" — a
-summary should not have to phrase itself around a checker. Its `absent_tables` count is also
-raw: it does not know which omissions the summary *declared*, so on this book it reports 43
-absent when only a handful are genuine silent losses.
+summary should not have to phrase itself around a checker. A caption naming two tables at once
+("that is Table 12.4; Table 12.5 is the video set") still attributes both to the first.
+
+Absent tables are now classified rather than counted, which is what makes the number usable:
+of 43 without their own caption on this book, **8 are `unaccounted`** — from a `depth: full`
+part and named nowhere in the summary, the only class that should stop a ship — while 17 are
+cited elsewhere (ch04's fourteen mandatory-header tables were merged into one matrix that cites
+each source number row by row) and 18 sit in ch06, declared `depth: reference`. `accounted`
+is deliberately a weaker claim than `reproduced`: it says only that the summary did not drop
+the thing without a word.
 
 **Triage's `contradicted` verdict is retired, not merely deprioritised.** Precision measured
 22% → 17% → 2.6% across three rounds; two rounds of prompt tightening did not arrest it. The
@@ -114,10 +121,13 @@ page break as disagreement. `absent` and `incomplete` held up and are what the l
 rubric grades dropped detail as Major and fabrication as Critical, so round 2 shipped with
 three missing tables. `PLAN.md` §6c proposes the fix; it is not yet applied.
 
-**`run.py` produces thinner digests than the Claude Code agents.** At `--effort xhigh` it
-reaches parity on claims (102 vs 105) but still trails on identifiers (89 vs 100). One-shot
-generation compresses. Splitting distill into two calls — content, then the identifier ledger
-— is the untried fix.
+**`run.py` produces thinner digests than the Claude Code agents — fix written, not yet
+measured.** At `--effort xhigh` it reaches parity on claims (102 vs 105) but trails on
+identifiers (89 vs 100), because prose and enumeration compete for one budget. `distill` now
+makes a second, text-only call per part that re-derives the identifier table (`--no-ledger-pass`
+turns it off), and refuses any result with fewer rows than it started with — a pass meant to
+close a coverage gap must not be able to open one. The merge and that guard are tested with the
+model call stubbed; **whether it actually reaches 100 is unmeasured** and needs a paid run.
 
 **The length budget for technical books is drawn from one book.** `TECHNICAL_BUDGET` is
 15–25%, deliberately wide, provisional. Every run records its own share in `verify.json`;
@@ -150,9 +160,16 @@ confident claim turned out to be wrong and how it was caught.
 
 ## Open work
 
-- The Media Security chapter (4th edition, scanned from print) needs an image-only ingest
-  path — a scan has no text layer, so `pdftotext` yields nothing.
+- The Media Security chapter (4th edition) needs an image-only ingest path — but **the scan does
+  not exist yet**; `~/reference/books/sip-johnston/source/` holds only `book.pdf`. Nothing can be
+  built against it without knowing the real input (one PDF or loose images, resolution,
+  orientation, whether OCR is worth attempting), so this is blocked on the scan, not on code.
+  The shape is already implied by what exists: no `text/<label>.txt`, pages supplied as images
+  the way ch16's were, and everything from it marked `TRANSCRIBED` so `verify.py` skips the
+  identifier and numeral checks it could only fail. `verify.py` already reports text-less parts
+  via `missing_text`.
 - `mutate.py` and `score.py` have measured the adversary once. One seed is not a measurement;
   the per-class recall table needs more runs before it means anything.
-- `score.py`'s finding-splitter counts report *sections*, not findings, so its precision
-  column is meaningless. Recall is sound.
+- The eight `unaccounted` tables `omissions.py` now isolates have not been adjudicated. Four of
+  them are ch10's NAT taxonomy tables, and §9 is three pages — worth a look before the next
+  review round.

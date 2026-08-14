@@ -90,7 +90,62 @@ def strip_fence(text: str) -> str:
 # --- stages -----------------------------------------------------------------
 
 
-def distill_one(book: corpus.Book, part: corpus.Part, effort: str) -> tuple[str, int, int]:
+_LEDGER_INSTRUCTION = """\
+You have already written the digest below. Its `## Identifiers` table is the part one-shot
+generation reliably under-fills: writing prose and enumerating a ledger compete for the same
+budget, and the ledger loses. Measured on sip-johnston, this pass reached 89 identifiers where a
+per-chapter agent reached 100.
+
+Go back through the chapter text and find every identifier the table is missing — header field,
+method, status code, parameter, option tag, timer, RFC number, SDP attribute, payload type,
+protocol element. One row each, in the digest's own column order.
+
+Output the COMPLETE table: every row already present, unchanged, plus the additions. Output only
+the markdown table — no heading, no prose, no fence.
+"""
+
+
+def _section(md: str, heading: str) -> tuple[int, int] | None:
+    """(start, end) line indices of a `## heading` section's body, or None."""
+    lines = md.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if start is None:
+            if line.strip().lower() == f"## {heading}".lower():
+                start = i + 1
+            continue
+        if line.startswith("## "):
+            return start, i
+    return (start, len(lines)) if start is not None else None
+
+
+def ledger_pass(part: corpus.Part, digest: str, effort: str) -> tuple[str, int, int]:
+    """Re-derive the identifier table in its own call. Returns (digest, before, after).
+
+    Never shrinks the ledger: if the second call comes back with fewer rows than the first, the
+    original is kept. A pass meant to close a coverage gap must not be able to open one.
+    """
+    span = _section(digest, "Identifiers")
+    if span is None:
+        return digest, 0, 0
+    lines = digest.splitlines()
+    start, end = span
+    before = [l for l in lines[start:end] if l.strip().startswith("|")]
+
+    table = strip_fence(call([
+        {"type": "text", "text": _LEDGER_INSTRUCTION},
+        {"type": "text", "text": f"--- CHAPTER TEXT ({part.label}) ---\n{part.raw}"},
+        {"type": "text", "text": "--- CURRENT IDENTIFIERS TABLE ---\n" + "\n".join(before)},
+    ], effort, max_tokens=16000)).strip()
+
+    after = [l for l in table.splitlines() if l.strip().startswith("|")]
+    if len(after) <= len(before):
+        return digest, len(before), len(before)
+    merged = lines[:start] + ["", *after, ""] + lines[end:]
+    return "\n".join(merged) + "\n", len(before), len(after)
+
+
+def distill_one(book: corpus.Book, part: corpus.Part, effort: str, ledger: bool = True) -> tuple[str, int, int, str]:
     pages = sorted((book.work_dir(ROOT) / "pages" / part.label).glob("p-*.png"))
     content: list[dict] = [
         {"type": "text", "text": read(ROOT / "prompts" / "distill.md")},
@@ -113,8 +168,12 @@ def distill_one(book: corpus.Book, part: corpus.Part, effort: str) -> tuple[str,
     out = book.work_dir(ROOT) / "digests" / f"{part.label}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     text = strip_fence(call(content, effort))
+    note = ""
+    if ledger:
+        text, was, now = ledger_pass(part, text, effort)
+        note = f"ledger {was}→{now}" if now != was else f"ledger {was} (unchanged)"
     out.write_text(text)
-    return part.label, len(text.split()), len(pages)
+    return part.label, len(text.split()), len(pages), note
 
 
 def cmd_distill(book: corpus.Book, args) -> int:
@@ -128,11 +187,15 @@ def cmd_distill(book: corpus.Book, args) -> int:
         print("nothing to do — every selected part already has a digest (use --force to redo)")
         return 0
 
+    ledger = not args.no_ledger_pass
     print(f"distilling {len(parts)} part(s) at effort {args.effort}: {', '.join(p.label for p in parts)}")
+    print(f"  identifier pass: {'on — one extra text-only call per part' if ledger else 'off'}")
     started = time.time()
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        for label, words, pages in pool.map(lambda p: distill_one(book, p, args.effort), parts):
-            print(f"  {label:<8} {words:>6,} words · {pages} page images")
+        for label, words, pages, note in pool.map(
+            lambda p: distill_one(book, p, args.effort, ledger), parts
+        ):
+            print(f"  {label:<8} {words:>6,} words · {pages} page images · {note}")
     print(f"{time.time() - started:.0f}s")
     return 0
 
@@ -208,6 +271,10 @@ def main() -> int:
             s.add_argument("--parts")
             s.add_argument("--workers", type=int, default=4)
             s.add_argument("--force", action="store_true")
+            # On by default: it closes the measured 89-vs-100 identifier gap, and the extra call
+            # is text-only (no page images), so it is the cheap half of the pair.
+            s.add_argument("--no-ledger-pass", action="store_true",
+                           help="skip the second, identifier-only call per part")
         if name == "review":
             s.add_argument("--round", type=int, default=1)
             s.add_argument("--summary", type=Path)

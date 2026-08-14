@@ -43,24 +43,90 @@ def shingles(text: str) -> set[str]:
     return {w.lower() for w in _WORD_RE.findall(text)} - _STOP
 
 
-def findings(md: str) -> list[dict]:
-    """Split a review into findings.
+# A finding's own label: `**C1 — …`, `### M2.`, `minor 3:`. Case is significant and must not
+# be folded — this project's reports use `M1` for Major and `m1` for Minor.
+_ID_SHORT_RE = re.compile(r"^[#>\s]*\**\s*([CMm])\s*[-–—.:)\s]?\s*(\d{1,3})\b")
+_ID_LONG_RE = re.compile(r"^[#>\s]*\**\s*(critical|major|minor)\s*[-–—.:)#\s]?\s*(\d{1,3})\b", re.I)
+_SEV_COUNT_RE = re.compile(r"(\d+)\s+(critical|major|minor)", re.I)
 
-    Reviews are markdown and their shape varies by model, so anything that looks like an item
-    boundary starts one: a heading, a numbered item, or a bullet. Over-splitting is harmless —
-    each fragment is matched independently and a defect needs only one hit.
+
+def _finding_id(line: str) -> str | None:
+    for rx in (_ID_SHORT_RE, _ID_LONG_RE):
+        if m := rx.match(line):
+            return f"{m.group(1)}{m.group(2)}"
+    return None
+
+
+def findings_section(md: str) -> tuple[list[str], int]:
+    """The lines of the report's findings section, and the offset they start at.
+
+    Everything after it — triage adjudication, coverage, what could not be settled — is prose
+    *about* the review, not findings. Counting it was what made the precision column meaningless:
+    a report with 15 findings scored as though it had 60-odd, most of them unmatched by
+    construction.
     """
+    lines = md.splitlines()
+    start: int | None = None
+    for i, line in enumerate(lines):
+        if not (m := re.match(r"^##\s+(.*)$", line)):
+            continue
+        title = m.group(1).strip().lower()
+        if start is None:
+            if title.startswith("finding") and "by severity" not in title:
+                start = i + 1
+            continue
+        return lines[start:i], start
+    return (lines[start:], start) if start is not None else (lines, 0)
+
+
+def findings(md: str) -> list[dict]:
+    """Split a review into findings, one per labelled item.
+
+    Splitting on *any* markdown item boundary over-splits badly: a single finding is a label
+    plus several evidence bullets, so it became four or five "findings". Recall survived that
+    (each fragment is matched independently and a defect needs one hit) but precision did not,
+    because the denominator was fragments.
+
+    So the label is the boundary. Where a report uses no labels, fall back to the old generous
+    rule *within the findings section* — over-splitting there is still better than missing a
+    finding, and `declared_counts` will show the disagreement.
+    """
+    body, offset = findings_section(md)
     out: list[dict] = []
     current: list[str] = []
-    start = 1
-    for i, line in enumerate(md.splitlines(), start=1):
-        if re.match(r"^\s*(#{1,6}\s|\d+[.)]\s|[-*]\s)", line) and current:
-            out.append({"line": start, "text": " ".join(current)})
-            current, start = [], i
-        current.append(line.strip())
+    start = 0
+    fid: str | None = None
+    for i, line in enumerate(body):
+        if new := _finding_id(line):
+            if current:
+                out.append({"line": offset + start + 1, "text": " ".join(current), "id": fid})
+            current, start, fid = [line.strip()], i, new
+        elif current:
+            current.append(line.strip())
     if current:
-        out.append({"line": start, "text": " ".join(current)})
+        out.append({"line": offset + start + 1, "text": " ".join(current), "id": fid})
+
+    if not out:  # unlabelled report — generous fallback, confined to the findings section
+        for i, line in enumerate(body):
+            if re.match(r"^\s*(#{1,6}\s|\d+[.)]\s|[-*]\s)", line) and current:
+                out.append({"line": offset + start + 1, "text": " ".join(current), "id": None})
+                current, start = [], i
+            current.append(line.strip())
+        if current:
+            out.append({"line": offset + start + 1, "text": " ".join(current), "id": None})
+
     return [f for f in out if len(f["text"].split()) >= 4]
+
+
+def declared_counts(md: str) -> dict[str, int]:
+    """The severity tally the report states about itself, from its closing line.
+
+    The review prompt requires the report to end with its own count, which makes it a free
+    check on this splitter: if the two disagree, one of them is wrong and the precision figure
+    should not be read until it is known which.
+    """
+    tail = "\n".join(md.splitlines()[-12:])
+    return {sev.lower(): int(n) for n, sev in _SEV_COUNT_RE.findall(tail)}
 
 
 def matches(defect: dict, finding: dict) -> tuple[bool, str]:
@@ -152,7 +218,19 @@ def main() -> int:
             print(f"  #{d['id']:<3} {d['kind']:<12} line {d['line']:<5} {d['hint'][:70]}")
 
     extra = len(found) - len(used)
+    review_md = args.review.read_text()
+    declared = declared_counts(review_md)
     print(f"\n{len(found)} findings · {len(used)} matched a known defect · {extra} did not")
+    if len(found):
+        print(f"precision {len(used) / len(found):.0%} — read the caveat below before using it")
+    if declared:
+        total_declared = sum(declared.values())
+        shape = " · ".join(f"{v} {k}" for k, v in declared.items())
+        agree = "agrees" if total_declared == len(found) else "DISAGREES"
+        print(f"report declares {total_declared} ({shape}) — splitter {agree}")
+        if total_declared != len(found):
+            print("  precision is not trustworthy until that gap is explained: the splitter is")
+            print("  either merging findings or counting something that is not one.")
     print("Unmatched findings are not necessarily wrong — check a sample against the source")
     print("before treating them as noise; the summary had real defects before it was mutated.")
 

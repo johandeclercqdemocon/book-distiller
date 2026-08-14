@@ -59,6 +59,72 @@ def is_noise(key: str) -> bool:
     return any(p.match(key) for p in _NOISE)
 
 
+def declared_depth(book: corpus.Book) -> dict[str, str]:
+    """label -> the depth meta.json declares for it, for in-scope parts only.
+
+    `depth: full` is a promise that nothing was deliberately left out, so an absence there is
+    a silent loss. `depth: reference` (ch06 here) is a declared thinning, and its absences are
+    the summary doing what it said it would.
+    """
+    return {
+        corpus.normalise_label(p["label"]): str(p.get("depth", "full"))
+        for p in book.meta.get("parts", [])
+        if p.get("in_scope", True)
+    }
+
+
+def owning_part(table_number: str) -> str:
+    """`Table 6.19` belongs to chapter 6 — the book numbers its tables by chapter."""
+    return f"ch{int(table_number.split('.')[0]):02d}"
+
+
+def accounted_numbers(md: str) -> set[str]:
+    """Table numbers the summary accounts for without reproducing under that caption.
+
+    `numbered_tables` only sees a table that kept its own caption. ch04's fourteen
+    mandatory-header tables were legitimately merged into one matrix whose `Table` column cites
+    each source number row by row — every cell the book's. Judged on captions alone that reads
+    as fourteen losses, which is how a raw count turns a good editorial decision into an alarm.
+
+    So: a number named in prose after the word "Table", or sitting in any table cell, counts as
+    accounted for. It is a weaker claim than "reproduced" and deliberately so — it only says the
+    summary did not drop the thing on the floor without a word.
+    """
+    found: set[str] = set()
+    for line in md.splitlines():
+        if "Table" in line or line.lstrip().startswith("|"):
+            found.update(re.findall(r"\b(\d+\.\d+)\b", line))
+    return found
+
+
+def classify_absent(
+    numbers: list[str], depths: dict[str, str], accounted: set[str]
+) -> dict[str, list[str]]:
+    """Split absent tables by how much worry each deserves.
+
+    The raw count was the problem: 43 absent on this book read as catastrophic. Most sat either
+    in a chapter the summary had *said* it was thinning, or in a merged matrix that cites them
+    row by row. A number that cannot separate those from a real loss makes the reader discount
+    all three.
+
+    `unaccounted` is the only class that should stop a ship: a `depth: full` part promised
+    nothing was left out, and the number appears nowhere in the summary at all.
+    """
+    out: dict[str, list[str]] = {
+        "unaccounted": [], "accounted": [], "declared": [], "out_of_scope": []}
+    for num in numbers:
+        depth = depths.get(owning_part(num))
+        if depth is None:
+            out["out_of_scope"].append(num)
+        elif depth != "full":
+            out["declared"].append(num)
+        elif num in accounted:
+            out["accounted"].append(num)
+        else:
+            out["unaccounted"].append(num)
+    return out
+
+
 def norm(cell: str) -> str:
     """Compare identifiers on substance: strip markup, case and trailing punctuation."""
     return re.sub(r"[`*_]", "", cell).strip().strip(".,;:").lower()
@@ -226,10 +292,21 @@ def main() -> int:
     if len(shown) > args.max:
         print(f"          … {len(shown) - args.max} more")
 
+    depths = declared_depth(book)
+    absent_by_kind = classify_absent(absent_tables, depths, accounted_numbers(md))
+    unaccounted = absent_by_kind["unaccounted"]
     print(f"\ntables: {len(s_tables)} numbered tables reproduced · {len(dropped_rows)} with rows missing"
-          f" · {len(absent_tables)} absent entirely")
-    for num in absent_tables[: args.max]:
-        print(f"          Table {num}: absent from the summary ({len(d_tables[num])} rows in the digests)")
+          f" · {len(absent_tables)} without their own caption")
+    print(f"        {len(unaccounted)} UNACCOUNTED (a `depth: full` part, named nowhere) · "
+          f"{len(absent_by_kind['accounted'])} cited elsewhere · "
+          f"{len(absent_by_kind['declared'])} declared thin · "
+          f"{len(absent_by_kind['out_of_scope'])} out of scope")
+    for num in unaccounted[: args.max]:
+        print(f"          Table {num}: UNACCOUNTED — {owning_part(num)} is `depth: full` and the "
+              f"summary never names it ({len(d_tables[num])} rows in the digests)")
+    for num in absent_by_kind["accounted"][: args.max]:
+        print(f"          Table {num}: cited but not reproduced under its own caption "
+              f"({len(d_tables[num])} rows)")
     for num, keys in sorted(dropped_rows.items()):
         print(f"          Table {num}: {len(keys)} row(s) — {', '.join(keys[:6])}")
 
@@ -252,6 +329,7 @@ def main() -> int:
                 ],
                 "dropped_table_rows": dropped_rows,
                 "absent_tables": {n: sorted(d_tables[n]) for n in absent_tables},
+                "absent_tables_by_kind": absent_by_kind,
                 "parts_not_indexed": missing_parts,
             },
             indent=2,
