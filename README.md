@@ -153,8 +153,11 @@ restoring the original leaves both forms in the ledger. Redundancy is the delibe
 against loss, and assembly dedupes.
 
 **The length budget for technical books is drawn from one book.** `TECHNICAL_BUDGET` is
-15–25%, deliberately wide, provisional. Every run records its own share in `verify.json`;
-revisit once three or four technical books have been through.
+15–30% as of 2026-08-14, raised from 15–25% by the reader's decision. The old ceiling had 0.1pp
+of headroom left once ch16's listings landed, which meant every table restored afterwards blew
+it — a restored table needs a locator line and a stated declaration, and those are prose. A
+ceiling that makes "cite every claim, declare every omission" cost budget is working against the
+summary. Still provisional, still one book; every run records its share in `verify.json`.
 
 **Agent and command definitions load at Claude Code startup.** Editing `.claude/agents/` or
 `.claude/commands/` needs a restart; `prompts/*.md` and the scripts are read at run time and
@@ -193,6 +196,10 @@ confident claim turned out to be wrong and how it was caught.
   via `missing_text`.
 - `mutate.py` and `score.py` have measured the adversary once. One seed is not a measurement;
   the per-class recall table needs more runs before it means anything.
-- The eight `unaccounted` tables `omissions.py` now isolates have not been adjudicated. Four of
-  them are ch10's NAT taxonomy tables, and §9 is three pages — worth a look before the next
-  review round.
+- The `unaccounted` count is **0**: all eight were adjudicated on 2026-08-14. Six were restored
+  cell for cell (3.2, 3.3, 10.1, 10.2, 10.4, 13.4), one was already present without its number
+  (10.3, now captioned), and one was declared rather than reproduced (2.2, a legend whose every
+  field name §7 already carries). Two things surfaced doing it: the digest's "Table 2.2" rows
+  were actually Table 2.1's — proximity misattribution on the *digest* side, which
+  `omissions.py` inherits — and Table 10.3 contradicts the prose that introduces it, now §11
+  item 19.

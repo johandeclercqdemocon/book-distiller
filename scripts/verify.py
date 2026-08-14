@@ -41,8 +41,14 @@ ORDER = {CRITICAL: 0, MAJOR: 1, MINOR: 2}
 # PROVISIONAL: this band is drawn from ONE technical book. It is deliberately wide so it acts
 # as a sanity check rather than a target, and every run records its own share in verify.json
 # — revisit once three or four technical books have been through, and let the data set it.
+#
+# Raised 15-25% -> 15-30% on 2026-08-14, by the reader's decision. The 25% ceiling was set
+# before ch16's seven wire-format listings and the eight restored reference tables went in, and
+# it had 0.1pp of headroom left: any table restored afterwards needed a locator line and a
+# stated declaration, and those are prose. A ceiling that makes the project's own rules — cite
+# every claim, declare every omission — cost budget is a ceiling working against the summary.
 DEEP_BUDGET = (0.08, 0.12)
-TECHNICAL_BUDGET = (0.15, 0.25)
+TECHNICAL_BUDGET = (0.15, 0.30)
 BRIEF_BUDGET = (1200, 1800)  # absolute words
 UNDERWEIGHT_RATIO = 0.25  # citation share vs word share
 
@@ -211,6 +217,10 @@ def parse_blocks(md: str) -> list[Block]:
     return blocks
 
 
+def _despace(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
 def strip_markup(text: str) -> str:
     text = _BRACKET_RE.sub(" ", text)
     text = _CODE_RE.sub(" ", text)
@@ -343,6 +353,13 @@ class Verifier:
                 continue
             needle = corpus.flatten(tok, strip_markup=True)
             if any(needle in p.flat for p in parts):
+                continue
+            # Second chance with all whitespace removed. pdftotext splits ligatures, so this
+            # book's `a=fingerprint` and `a=confid` extract as `a=fi ngerprint` and `a=confi d`
+            # and a correct transcription looks invented. Confirmed against the rendered page:
+            # both are single words in print. Scoped to identifiers, which are structured
+            # tokens — doing the same for prose quotes would let "at one" match "atone".
+            if any(_despace(needle) in _despace(p.flat) for p in parts):
                 continue
             if any(needle.lower() in p.flat_lower for p in parts):
                 self.add("identifier.case", MINOR, b.line, f"`{tok}` appears in source with different case")
