@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -119,30 +120,66 @@ def _section(md: str, heading: str) -> tuple[int, int] | None:
     return (start, len(lines)) if start is not None else None
 
 
+_SEP_ROW_RE = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+
+
+def _split_table(lines: list[str]) -> tuple[list[str], list[str]]:
+    """(header rows through the separator, data rows). Either may be empty."""
+    table = [l for l in lines if l.strip().startswith("|")]
+    for i, line in enumerate(table):
+        if _SEP_ROW_RE.match(line):
+            return table[: i + 1], table[i + 1 :]
+    return [], table
+
+
+def _row_key(row: str) -> str:
+    return row.strip().strip("|").split("|")[0].strip().strip("`* ")
+
+
+def _is_junk_key(key: str) -> bool:
+    """Column-split debris, not an identifier: `*`, `+`, `-`, a lone letter, an empty cell.
+
+    Deliberately narrow. Anything arguable — `2xx`, `18x`, an RFC number — is left alone; this
+    is here to drop what is obviously an artifact of splitting a printed table on pipes.
+    """
+    return len(key) < 2 or not any(c.isalnum() for c in key)
+
+
 def ledger_pass(part: corpus.Part, digest: str, effort: str) -> tuple[str, int, int]:
     """Re-derive the identifier table in its own call. Returns (digest, before, after).
 
-    Never shrinks the ledger: if the second call comes back with fewer rows than the first, the
-    original is kept. A pass meant to close a coverage gap must not be able to open one.
+    The guard here is set membership, not row count, and that distinction was learned the
+    expensive way. A count-only guard passed a ch13 run that went 111 rows -> 183 while
+    *losing* eleven real SDP attributes — `a=cat:`, `a=tool:`, `a=orient:`, `a=charset:`,
+    `a=sdplang:`, `a=framerate:` and the rest of that family — and padding the total with
+    column-split debris (`*`, `+`, `-`) and one prose phrase. The number went up and the
+    coverage went down, which is the exact failure this pass exists to prevent.
+
+    So: no key present before may be absent after. Anything the model dropped is restored from
+    the original rows, and obvious debris is filtered out of what it added.
     """
     span = _section(digest, "Identifiers")
     if span is None:
         return digest, 0, 0
     lines = digest.splitlines()
     start, end = span
-    before = [l for l in lines[start:end] if l.strip().startswith("|")]
+    head, before = _split_table(lines[start:end])
 
     table = strip_fence(call([
         {"type": "text", "text": _LEDGER_INSTRUCTION},
         {"type": "text", "text": f"--- CHAPTER TEXT ({part.label}) ---\n{part.raw}"},
-        {"type": "text", "text": "--- CURRENT IDENTIFIERS TABLE ---\n" + "\n".join(before)},
+        {"type": "text", "text": "--- CURRENT IDENTIFIERS TABLE ---\n" + "\n".join(head + before)},
     ], effort, max_tokens=16000)).strip()
 
-    after = [l for l in table.splitlines() if l.strip().startswith("|")]
-    if len(after) <= len(before):
+    new_head, new_rows = _split_table(table.splitlines())
+    kept = [r for r in new_rows if not _is_junk_key(_row_key(r))]
+    have = {_row_key(r) for r in kept}
+    restored = [r for r in before if _row_key(r) not in have]
+    rows = kept + restored
+    if len(rows) <= len(before):
         return digest, len(before), len(before)
-    merged = lines[:start] + ["", *after, ""] + lines[end:]
-    return "\n".join(merged) + "\n", len(before), len(after)
+    merged = lines[:start] + ["", *(new_head or head), *rows, ""] + lines[end:]
+    return "\n".join(merged) + "\n", len(before), len(rows)
 
 
 def distill_one(book: corpus.Book, part: corpus.Part, effort: str, ledger: bool = True) -> tuple[str, int, int, str]:

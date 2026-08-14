@@ -121,13 +121,23 @@ page break as disagreement. `absent` and `incomplete` held up and are what the l
 rubric grades dropped detail as Major and fabrication as Critical, so round 2 shipped with
 three missing tables. `PLAN.md` §6c proposes the fix; it is not yet applied.
 
-**`run.py` produces thinner digests than the Claude Code agents — fix written, not yet
-measured.** At `--effort xhigh` it reaches parity on claims (102 vs 105) but trails on
-identifiers (89 vs 100), because prose and enumeration compete for one budget. `distill` now
-makes a second, text-only call per part that re-derives the identifier table (`--no-ledger-pass`
-turns it off), and refuses any result with fewer rows than it started with — a pass meant to
-close a coverage gap must not be able to open one. The merge and that guard are tested with the
-model call stubbed; **whether it actually reaches 100 is unmeasured** and needs a paid run.
+**`run.py`'s identifier gap: closed on count, and the measurement is the interesting part.**
+At `--effort xhigh` it reached parity on claims (102 vs 105) but trailed on identifiers (89 vs
+the agents' 100), because prose and enumeration compete for one budget. `distill` now makes a
+second, text-only call per part that re-derives the identifier table (`--no-ledger-pass` turns
+it off).
+
+**Read the guard before trusting the number.** The first version compared row *counts*. A paid
+ch13 run passed it going 111 rows → 183 while losing eleven real SDP attributes — `a=cat:`,
+`a=tool:`, `a=orient:`, `a=charset:`, `a=sdplang:`, `a=framerate:` and the rest of that family —
+and padding the total with column-split debris (`*`, `+`, `-`) and one prose phrase. The count
+rose and the coverage fell. The guard is now set membership: no key present before may be absent
+after, dropped keys are restored from the originals, and debris is filtered from what was added.
+Verified by replaying that run's actual response — 89 → 182 rows, nothing lost, nothing junk.
+
+A side effect worth knowing: where the model unpacks a row that packed a family into one cell,
+restoring the original leaves both forms in the ledger. Redundancy is the deliberate trade
+against loss, and assembly dedupes.
 
 **The length budget for technical books is drawn from one book.** `TECHNICAL_BUDGET` is
 15–25%, deliberately wide, provisional. Every run records its own share in `verify.json`;
